@@ -6,12 +6,12 @@ import re
 
 MISTRAL_MODEL = "mistral-large-latest"
 
-POSSIBLE_COMMANDS = [
-    (  # (command_name, description, arguments)
+POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
+    (
         "create_group_chat",
         "Creates a private thread with the mentioned users.",
-        ["user_mentions", "array"],
-    )
+        [("user_mentions", "array")],
+    ),
 ]
 
 SYSTEM_PROMPT = f"""
@@ -29,22 +29,21 @@ User: create a group chat with me and @user1
 You: create_group_chat(user_mentions=[@{{id of the message sender}}, @user1])
 """
 
-discord_agent = DiscordAgent()
-
 
 class MistralAgent:
     def __init__(self):
         MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
         self.client = Mistral(api_key=MISTRAL_API_KEY)
+        self.discord_agent = DiscordAgent()
 
     async def run(self, message: discord.Message):
         # The simplest form of an agent
         # Send the message's content to Mistral's API and return Mistral's response
 
-        channel_members = await discord_agent.get_users_in_message(message)
-        print("channel_members:", channel_members)
+        channel_members = await self.discord_agent.get_users_in_message(message)
 
+        # send initial message to Mistral
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -53,19 +52,25 @@ class MistralAgent:
             },
         ]
 
+        # extract the response from Mistral
         response = await self.client.chat.complete_async(
             model=MISTRAL_MODEL,
             messages=messages,
         )
         content = response.choices[0].message.content
-        print("content:", content)
 
+        # check if the response contains a command
         if "create_group_chat" in content:
+            # Check if there are any mentioned users in the mistral response
             if match := re.search(r"user_mentions=\[(.*)\]", content):
                 user_mentions = match.group(1)
                 user_mentions = user_mentions.split(",")
                 user_mentions = [mention.strip() for mention in user_mentions]
 
-                return await discord_agent.create_group_chat(message, user_mentions)
+                return await self.discord_agent.create_group_chat(
+                    message, user_mentions
+                )
+        else:
+            return None
 
         return content

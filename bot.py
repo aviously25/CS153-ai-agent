@@ -58,7 +58,8 @@ async def on_message(message: discord.Message):
     response = await agent.run(message)
 
     # Send the response back to the channel
-    await message.reply("**avi bot response:\n**" + response)
+    if response:
+        await message.reply(response)
 
 
 # Commands

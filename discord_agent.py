@@ -30,8 +30,6 @@ class DiscordAgent:
         message: discord.Message,
         user_mentions: list[str],
     ):
-        print("called create_group_chat with user_mentions:", user_mentions)
-
         # Convert string IDs to Discord User objects
         discord_users = []
         for user_id in user_mentions:
