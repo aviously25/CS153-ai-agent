@@ -70,7 +70,5 @@ class MistralAgent:
                 return await self.discord_agent.create_group_chat(
                     message, user_mentions
                 )
-        else:
-            return None
 
         return content

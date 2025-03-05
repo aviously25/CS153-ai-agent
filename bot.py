@@ -6,13 +6,14 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from agent import MistralAgent
 
-PREFIX = "!"
-
 # Setup logging
 logger = logging.getLogger("discord")
 
 # Load the environment variables
 load_dotenv()
+
+PREFIX = "!"
+USER_ID = int(os.getenv("USER_ID"))
 
 # Create the bot with all intents
 # The message content and members intent must be enabled in the Discord Developer Portal for the bot to work.
@@ -49,7 +50,11 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
     # Ignore messages from self or other bots to prevent infinite loops.
-    if message.author.bot or message.content.startswith("!"):
+    if (
+        message.author.bot
+        or message.content.startswith("!")
+        or message.author.id != USER_ID  # Ignore messages from other users
+    ):
         return
 
     # Process the message with the agent you wrote
