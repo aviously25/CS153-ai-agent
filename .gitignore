@@ -10,6 +10,7 @@ wheels/
 .venv
 lib
 cs153
+.example.env
 
 # Secrets
 .env
