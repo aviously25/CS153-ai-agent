@@ -6,14 +6,14 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from agent import MistralAgent
 
+PREFIX = "!"
+
 # Setup logging
 logger = logging.getLogger("discord")
+logging.basicConfig(level=logging.INFO)
 
 # Load the environment variables
 load_dotenv()
-
-PREFIX = "!"
-USER_ID = int(os.getenv("USER_ID"))
 
 # Create the bot with all intents
 # The message content and members intent must be enabled in the Discord Developer Portal for the bot to work.
@@ -23,10 +23,22 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 # Import the Mistral agent from the agent.py file
 agent = MistralAgent()
 
-
 # Get the token from the environment variables
 token = os.getenv("DISCORD_TOKEN")
 
+# Load all cogs
+async def load_cogs():
+    """
+    Dynamically loads all cogs from the 'cogs' folder.
+    """
+    logger.info("Loading cogs...")
+    for filename in os.listdir("./cogs"):
+        if filename.endswith(".py") and filename != "__init__.py":
+            try:
+                await bot.load_extension(f"cogs.{filename[:-3]}")
+                logger.info(f"Loaded cog: {filename[:-3]}")
+            except Exception as e:
+                logger.error(f"Failed to load cog {filename[:-3]}: {e}")
 
 @bot.event
 async def on_ready():
@@ -36,6 +48,12 @@ async def on_ready():
 
     https://discordpy.readthedocs.io/en/latest/api.html#discord.on_ready
     """
+    try:
+        await load_cogs()
+        logger.info("✅ All cogs loaded successfully!")
+    except Exception as e:
+        logger.error(f"❌ Failed to load cogs: {e}")
+
     logger.info(f"{bot.user} has connected to Discord!")
 
 
@@ -50,11 +68,7 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
     # Ignore messages from self or other bots to prevent infinite loops.
-    if (
-        message.author.bot
-        or message.content.startswith("!")
-        or message.author.id != USER_ID  # Ignore messages from other users
-    ):
+    if message.author.bot or message.content.startswith("!"):
         return
 
     # Process the message with the agent you wrote
@@ -63,8 +77,7 @@ async def on_message(message: discord.Message):
     response = await agent.run(message)
 
     # Send the response back to the channel
-    if response:
-        await message.reply(response)
+    await message.reply(response)
 
 
 # Commands

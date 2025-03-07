@@ -8,6 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+lib
+cs153
 
 # Secrets
 .env
