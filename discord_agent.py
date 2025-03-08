@@ -2,16 +2,16 @@ import discord
 
 
 class DiscordAgent:
-    async def get_user_by_id(self, user_id: str, guild: discord.Guild):
+    def get_user_by_id(self, user_id: str):
         try:
             clean_id = "".join(filter(str.isdigit, user_id))
-            return discord.Client.get_channel((int(clean_id)))
+            return discord.Client.get_user((int(clean_id)))
         except discord.NotFound:
             return None
         except ValueError:
             return None
 
-    async def get_channel_by_id(self, channel_id: str):
+    def get_channel_by_id(self, channel_id: str):
         try:
             clean_id = "".join(filter(str.isdigit, channel_id))
             return discord.Client.get_channel((int(clean_id)))
@@ -49,19 +49,19 @@ class DiscordAgent:
             return None
     
     # Convert string IDs to Discord User objects
-    async def get_user_mentions(self, message: discord.Message, user_mentions: list[str]):
+    def get_user_mentions(self, user_mentions: list[str]):
         discord_users = []
         for user_id in user_mentions:
-            user = await self.get_user_by_id(user_id, message.guild)
+            user = self.get_user_by_id(user_id)
             if user:
                 discord_users.append(user)
         return discord_users
     
     # Convert string IDs to Discord Channel objects
-    async def get_channel_mentions(self, channel_mentions: list[str]):
+    def get_channel_mentions(self, channel_mentions: list[str]):
         channels = []
         for channel_id in channel_mentions:
-            channel = await self.get_channel_by_id(channel_id)
+            channel = self.get_channel_by_id(channel_id)
             if channel:
                 channels.append(channel)
         return channels
@@ -71,7 +71,7 @@ class DiscordAgent:
         message: discord.Message,
         user_mentions: list[str],
     ):
-        discord_users = self.get_user_mentions(message, user_mentions)
+        discord_users = self.get_user_mentions(user_mentions)
 
         # Check if we found any valid users
         if not discord_users:
@@ -110,7 +110,7 @@ class DiscordAgent:
         user_mentions: list[str],
         channel_mentions: list[str]):
 
-        discord_users = self.get_user_mentions(message, user_mentions)
+        discord_users = self.get_user_mentions(user_mentions)
         # Check if we found any valid users
         if not discord_users:
             return "No valid users found. Please check the user IDs."
