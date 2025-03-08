@@ -1,4 +1,4 @@
-name: discord_bot
+name: zxm_bot
 channels:
   - defaults
 dependencies:

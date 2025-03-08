@@ -12,6 +12,11 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         "Creates a private thread with the mentioned users.",
         [("user_mentions", "array")],
     ),
+    (
+        "invite_user_to_channel",
+        "Add user(s) to exitsing channel.",
+        [("user_mentions", "array"), ("channels_mention", "array")]
+    ),
 ]
 
 SYSTEM_PROMPT = f"""
@@ -27,6 +32,9 @@ You: create_group_chat(user_mentions=[@user1, @user2])
 
 User: create a group chat with me and @user1
 You: create_group_chat(user_mentions=[@{{id of the message sender}}, @user1])
+
+User: Add @user1 to @channel1
+You: invite_user_to_channel(user_mentions=[@user1], channel_mentions=[@channel1])
 """
 
 
@@ -43,12 +51,14 @@ class MistralAgent:
 
         channel_members = await self.discord_agent.get_users_in_message(message)
 
+        channel_mentions = await self.discord_agent.get_channel_mentions_in_message(message)
+
         # send initial message to Mistral
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Content: {message.content} \n\n Channel Members: {str(channel_members)} \n\n Sender: {message.author.id}",
+                "content": f"Content: {message.content} \n\n Channel Mentioned: {str(channel_mentions)} \n\n Channel Members: {str(channel_members)} \n\n Sender: {message.author.id}",
             },
         ]
 
@@ -70,5 +80,25 @@ class MistralAgent:
                 return await self.discord_agent.create_group_chat(
                     message, user_mentions
                 )
+        if "invite_user_to_channel" in content:
+            # Check if there are any mentioned users and channels in the mistral response
+            channel_mentions = []
+            if match := re.search(r"channel_mentions=\[(.*)\]", content):
+                channel_mentions = match.group(1)
+                channel_mentions = channel_mentions.split(",")
+                channel_mentions = [mention.strip() for mention in channel_mentions]
+            user_mentions = []
+            if match := re.search(r"user_mentions=\[(.*)\]", content):
+                user_mentions = match.group(1)
+                user_mentions = user_mentions.split(",")
+                user_mentions = [mention.strip() for mention in user_mentions]
+            if len(channel_mentions) == 0:
+                return "No channel mentioned. Please specify the channel you want to add new users to."
+            if len(user_mentions) == 0:
+                return "No user mentioned. Please specify the user(s) you want to add to the channel."
+
+            return await self.discord_agent.create_group_chat(
+                message, user_mentions
+            )
 
         return content
