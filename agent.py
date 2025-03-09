@@ -39,6 +39,16 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         "Assigns a role to a user.",
         [("member", "mention"), ("role_name", "string")],
     ),
+    (
+        "create_role",
+        "Creates a new role.",
+        [("role_name", "string")],
+    ),
+    (
+        "revoke_role",
+        "Revokes a role from a user.",
+        [("member", "mention"), ("role_name", "string")],
+    ),
 ]
 
 SYSTEM_PROMPT = f"""
@@ -73,6 +83,18 @@ You: assign_role(member=@user1, role_name="student")
 
 User: Give @user1 admin role
 You: assign_role(member=@user1, role_name="admin")
+
+User: Create a new role called moderator
+You: create_role(role_name="moderator")
+
+User: Make a new admin role
+You: create_role(role_name="admin")
+
+User: Revoke admin role from @user1
+You: revoke_role(member=@user1, role_name="admin")
+
+User: Remove moderator role from @user1
+You: revoke_role(member=@user1, role_name="moderator")
 
 """
 
@@ -208,6 +230,27 @@ class MistralAgent:
                 return await self.discord_agent.assign_role(message, member, role_name)
             else:
                 await self.discord_agent.handle_assign_role(message, member, role_name)
+                return
+
+         if "create_role" in content:
+            role_match = re.search(r"role_name=\"([^\"]+)\"", content)
+            role_name = role_match.group(1) if role_match else None
+
+            await self.discord_agent.handle_create_role(message, role_name)
+            return
+
+         if "revoke_role" in content:
+            member_match = re.search(r"member=<@!?(\d+)>", content)
+            role_match = re.search(r"role_name=\"([^\"]+)\"", content)
+            
+            member_id = int(member_match.group(1)) if member_match else None
+            role_name = role_match.group(1) if role_match else None
+            member = message.guild.get_member(member_id) if member_id else None
+
+            if member and role_name:
+                return await self.discord_agent.revoke_role(message, member, role_name)
+            else:
+                await self.discord_agent.handle_revoke_role(message, member, role_name)
                 return
 
          return content
