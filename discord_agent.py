@@ -12,6 +12,10 @@ class DiscordAgent:
         self.waiting_for_role = {}    # Store user IDs waiting for role name
         self.waiting_for_member = {}  # Store user IDs waiting for member with role name
         self.role_for_member = {}     # Store role name waiting for member
+        self.waiting_for_role_name = {}  # Store user IDs waiting for new role name
+        self.waiting_for_revoke_role = {}    # Store user IDs waiting for role to revoke
+        self.waiting_for_revoke_member = {}  # Store user IDs waiting for member to revoke from
+        self.revoke_role_for_member = {}     # Store role name waiting for member to revoke from
 
     def get_user_by_id(self, user_id: str):
         try:
@@ -314,3 +318,109 @@ class DiscordAgent:
             return
 
         await self.assign_role(message, member, role_name)
+
+    async def create_role(self, message: discord.Message, role_name: str):
+        """Creates a new role."""
+        if not message.guild.me.guild_permissions.manage_roles:
+            await message.channel.send("❌ I need the `Manage Roles` permission to create roles.")
+            return
+
+        # Check if role already exists
+        existing_role = discord.utils.get(message.guild.roles, name=role_name)
+        if existing_role:
+            await message.channel.send(f"❌ Role '{role_name}' already exists!")
+            return
+
+        try:
+            await message.guild.create_role(name=role_name)
+            await message.channel.send(f"✅ Successfully created role **{role_name}**!")
+        except discord.Forbidden:
+            await message.channel.send("❌ I don't have permission to create roles.")
+        except discord.HTTPException as e:
+            await message.channel.send(f"❌ Failed to create role: {str(e)}")
+
+    async def prompt_create_role(self, message: discord.Message):
+        await message.channel.send("What should the new role be called?")
+
+    async def handle_create_role(self, message: discord.Message, role_name: str = None):
+        user_id = message.author.id
+
+        # Handle response when waiting for role name
+        if user_id in self.waiting_for_role_name:
+            role_name = message.content.strip()
+            self.waiting_for_role_name.pop(user_id)
+            await self.create_role(message, role_name)
+            return
+
+        # Initial request
+        if not role_name:
+            self.waiting_for_role_name[user_id] = True
+            await self.prompt_create_role(message)
+            return
+
+        await self.create_role(message, role_name)
+
+    async def revoke_role(self, message: discord.Message, member: discord.Member, role_name: str):
+        """Revokes a role from a member."""
+        if not message.guild.me.guild_permissions.manage_roles:
+            await message.channel.send("❌ I need the `Manage Roles` permission to revoke roles.")
+            return
+
+        role = discord.utils.get(message.guild.roles, name=role_name)
+        if not role:
+            await message.channel.send(f"❌ Role '{role_name}' not found! Available roles: {', '.join([r.name for r in message.guild.roles])}")
+            return
+
+        if role not in member.roles:
+            await message.channel.send(f"❌ {member.display_name} doesn't have the role '{role_name}'")
+            return
+
+        try:
+            await member.remove_roles(role)
+            await message.channel.send(f"✅ Successfully removed the **{role.name}** role from {member.display_name}!")
+        except discord.Forbidden:
+            await message.channel.send("❌ I don't have permission to revoke this role.")
+        except discord.HTTPException as e:
+            await message.channel.send(f"❌ Failed to revoke role: {str(e)}")
+
+    async def prompt_revoke_role(self, message: discord.Message):
+        await message.channel.send("To revoke a role, use one of these formats:\n"
+                                 "1. 'revoke <role_name> role from @user'\n"
+                                 "2. First mention the role to revoke, then the user\n"
+                                 f"Available roles: {', '.join([r.name for r in message.guild.roles])}")
+
+    async def handle_revoke_role(self, message: discord.Message, member: discord.Member = None, role_name: str = None):
+        user_id = message.author.id
+
+        # Handle response when waiting for role name
+        if user_id in self.waiting_for_revoke_role:
+            member = self.waiting_for_revoke_role.pop(user_id)
+            role_name = message.content.strip()
+            await self.revoke_role(message, member, role_name)
+            return
+
+        # Handle response when waiting for member
+        if user_id in self.waiting_for_revoke_member:
+            if not message.mentions:
+                await message.channel.send("❌ Please mention the user using @username")
+                return
+            role_name = self.waiting_for_revoke_member.pop(user_id)
+            await self.revoke_role(message, message.mentions[0], role_name)
+            return
+
+        # Initial request handling
+        if not member and not role_name:
+            await message.channel.send("❌ Please specify both the role and the user.")
+            await self.prompt_revoke_role(message)
+            return
+        elif not member:
+            self.waiting_for_revoke_member[user_id] = role_name
+            await message.channel.send("From which user should this role be revoked? (Please mention them using @)")
+            return
+        elif not role_name:
+            self.waiting_for_revoke_role[user_id] = member
+            await message.channel.send(f"Which role should be revoked from {member.display_name}?\n"
+                                     f"Their current roles: {', '.join([r.name for r in member.roles[1:]])}")
+            return
+
+        await self.revoke_role(message, member, role_name)
