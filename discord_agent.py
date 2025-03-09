@@ -1,4 +1,5 @@
 import discord
+import datetime
 
 
 class DiscordAgent:
@@ -33,7 +34,7 @@ class DiscordAgent:
             ]
         except discord.NotFound:
             return None
-    
+
     async def get_channel_mentions_in_message(self, message: discord.Message):
         try:
             channels = message.channel_mentions
@@ -47,7 +48,7 @@ class DiscordAgent:
             ]
         except discord.NotFound:
             return None
-    
+
     # Convert string IDs to Discord User objects
     def get_user_mentions(self, user_mentions: list[str]):
         discord_users = []
@@ -56,7 +57,7 @@ class DiscordAgent:
             if user:
                 discord_users.append(user)
         return discord_users
-    
+
     # Convert string IDs to Discord Channel objects
     def get_channel_mentions(self, channel_mentions: list[str]):
         channels = []
@@ -103,12 +104,13 @@ class DiscordAgent:
             return "I don't have permission to create private threads!"
         except discord.HTTPException:
             return "Failed to create the thread. Please try again later."
-    
-    async def invite_member_to_channel(        
+
+    async def invite_member_to_channel(
         self,
         message: discord.Message,
         user_mentions: list[str],
-        channel_mentions: list[str]):
+        channel_mentions: list[str],
+    ):
 
         discord_users = self.get_user_mentions(user_mentions)
         # Check if we found any valid users
@@ -123,7 +125,9 @@ class DiscordAgent:
         # Create a list of usernames for the thread name
         mentioned_users = [user.display_name for user in discord_users]
         mentioned_channels = [channel.name for channel in channels]
-        res_message = await message.reply(f"Adding {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}")
+        res_message = await message.reply(
+            f"Adding {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}"
+        )
 
         try:
             for channel in mentioned_channels:
@@ -131,11 +135,35 @@ class DiscordAgent:
                 for user in discord_users:
                     await channel.add_user(user)
                     # Create mentions for the welcome message
-                    user_mentions_str = ", ".join([user.mention for user in discord_users])
+                    user_mentions_str = ", ".join(
+                        [user.mention for user in discord_users]
+                    )
                     await channel.send(f"Welcome {user_mentions_str}!")
-            await res_message.edit(content=f"Finished adding {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}")
+            await res_message.edit(
+                content=f"Finished adding {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}"
+            )
 
         except discord.Forbidden:
             return "I don't have permission to add users to channels!"
         except discord.HTTPException:
             return "Failed to add users to channels. Please try again later."
+
+    async def create_poll(
+        self,
+        message: discord.Message,
+        question: str,
+        answers: list[str],
+        duration: int = 24,  # in hours
+        multiple_answers: bool = False,  # whether multiple answers are allowed
+    ):
+        duration = datetime.timedelta(hours=duration)
+        poll = discord.Poll(
+            question=question,
+            duration=duration,
+        )
+
+        for answer in answers:
+            poll.add_answer(text=answer)
+
+        await message.reply(poll=poll)
+        return None
