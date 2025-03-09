@@ -21,7 +21,7 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
 # Import the Mistral agent from the agent.py file
-agent = MistralAgent()
+agent = None  # Will be initialized after bot is ready
 
 
 # Get the token from the environment variables
@@ -36,6 +36,9 @@ async def on_ready():
 
     https://discordpy.readthedocs.io/en/latest/api.html#discord.on_ready
     """
+    global agent
+    if agent is None:
+        agent = MistralAgent(bot)
     logger.info(f"{bot.user} has connected to Discord!")
 
 
