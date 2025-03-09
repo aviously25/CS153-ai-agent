@@ -84,7 +84,7 @@ class MistralAgent:
          )
 
         # send initial message to Mistral
-        messages = [
+         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
@@ -93,14 +93,14 @@ class MistralAgent:
         ]
 
         # extract the response from Mistral
-        response = await self.client.chat.complete_async(
+         response = await self.client.chat.complete_async(
             model=MISTRAL_MODEL,
             messages=messages,
         )
-        content = response.choices[0].message.content
+         content = response.choices[0].message.content
 
         # check if the response contains a command
-        if "create_group_chat" in content:
+         if "create_group_chat" in content:
             # Check if there are any mentioned users in the mistral response
             if match := re.search(r"user_mentions=\[(.*)\]", content):
                 user_mentions = match.group(1)
@@ -113,7 +113,7 @@ class MistralAgent:
 
 
 
-        if "create_poll" in content:
+         if "create_poll" in content:
              print("content: ", content)
              # extract question
              question_match = re.search(r"question=\"(.+?)\"", content)
@@ -139,7 +139,7 @@ class MistralAgent:
              else:
                  return await self.discord_agent.create_poll(message, question, answers)
                  
-        if "invite_user_to_channel" in content:
+         if "invite_user_to_channel" in content:
             # Check if there are any mentioned users and channels in the mistral response
             channel_mentions = []
             if match := re.search(r"channel_mentions=\[(.*)\]", content):
@@ -159,7 +159,7 @@ class MistralAgent:
             return await self.discord_agent.create_group_chat(
                 message, user_mentions
             )
-        if "change_bot_avatar" in content:
+         if "change_bot_avatar" in content:
             url_match = re.search(r"url=(https?://\S+)", content)
             bot_mention_match = re.search(r"bot_mention=<@!?(\d+)>", content)
             url = url_match.group(1) if url_match else None
@@ -171,7 +171,7 @@ class MistralAgent:
             else:
                 await self.discord_agent.handle_change_avatar(message, bot_member, url)
                 return
-        if "change_bot_name" in content:
+         if "change_bot_name" in content:
             bot_mention_match = re.search(r"bot_mention=<@!?(\d+)>", content)
             new_name_match = re.search(r"new_name=(\w+)", content)
             
@@ -185,4 +185,4 @@ class MistralAgent:
                 await self.discord_agent.handle_change_name(message, bot_member, new_name)
                 return
 
-        return content
+         return content
