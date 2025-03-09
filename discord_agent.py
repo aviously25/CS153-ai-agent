@@ -7,6 +7,11 @@ import datetime
 class DiscordAgent:
     def __init__(self, bot=None):
         self.bot = bot
+        self.waiting_for_bot = {}
+        self.waiting_for_name = {}
+        self.waiting_for_role = {}    # Store user IDs waiting for role name
+        self.waiting_for_member = {}  # Store user IDs waiting for member with role name
+        self.role_for_member = {}     # Store role name waiting for member
 
     def get_user_by_id(self, user_id: str):
         try:
@@ -248,3 +253,64 @@ class DiscordAgent:
             return
 
         await self.change_bot_name(message, bot_mention, new_name)
+
+    async def assign_role(self, message: discord.Message, member: discord.Member, role_name: str):
+        """Assigns a role to a member."""
+        if not message.guild.me.guild_permissions.manage_roles:
+            await message.channel.send("❌ I need the `Manage Roles` permission to assign roles.")
+            return
+
+        role = discord.utils.get(message.guild.roles, name=role_name)
+        if not role:
+            await message.channel.send(f"❌ Role '{role_name}' not found! Available roles: {', '.join([r.name for r in message.guild.roles])}")
+            return
+
+        try:
+            await member.add_roles(role)
+            await message.channel.send(f"✅ Successfully assigned the **{role.name}** role to {member.display_name}!")
+        except discord.Forbidden:
+            await message.channel.send("❌ I don't have permission to assign this role.")
+        except discord.HTTPException as e:
+            await message.channel.send(f"❌ Failed to assign role: {str(e)}")
+
+    async def prompt_assign_role(self, message: discord.Message):
+        await message.channel.send("To assign a role, use one of these formats:\n"
+                                 "1. 'assign <role_name> role to @user'\n"
+                                 "2. First mention the role, then the user\n"
+                                 f"Available roles: {', '.join([r.name for r in message.guild.roles])}")
+
+    async def handle_assign_role(self, message: discord.Message, member: discord.Member = None, role_name: str = None):
+        user_id = message.author.id
+
+        # Handle response when waiting for role name
+        if user_id in self.waiting_for_role:
+            member = self.waiting_for_role.pop(user_id)
+            role_name = message.content.strip()
+            await self.assign_role(message, member, role_name)
+            return
+
+        # Handle response when waiting for member
+        if user_id in self.waiting_for_member:
+            if not message.mentions:
+                await message.channel.send("❌ Please mention the user using @username")
+                return
+            role_name = self.waiting_for_member.pop(user_id)
+            await self.assign_role(message, message.mentions[0], role_name)
+            return
+
+        # Initial request handling
+        if not member and not role_name:
+            await message.channel.send("❌ Please specify both the role and the user.")
+            await self.prompt_assign_role(message)
+            return
+        elif not member:
+            self.waiting_for_member[user_id] = role_name
+            await message.channel.send("Which user should get this role? (Please mention them using @)")
+            return
+        elif not role_name:
+            self.waiting_for_role[user_id] = member
+            await message.channel.send(f"Which role should be assigned to {member.display_name}?\n"
+                                     f"Available roles: {', '.join([r.name for r in message.guild.roles])}")
+            return
+
+        await self.assign_role(message, member, role_name)
