@@ -17,6 +17,15 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         "Add user(s) to exitsing channel.",
         [("user_mentions", "array"), ("channels_mention", "array")]
     ),
+    (
+         "create_poll",
+         "Creates a poll in the channel.",
+         [
+             ("question", "string"),
+             ("answers", "array of strings"),
+             ("duration", "optional int in hours"),
+         ],
+     ),
     (   
         "change_bot_avatar", 
         "Changes the bot's avatar.", 
@@ -44,6 +53,10 @@ You: create_group_chat(user_mentions=[@{{id of the message sender}}, @user1])
 User: Add @user1 to @channel1
 You: invite_user_to_channel(user_mentions=[@user1], channel_mentions=[@channel1])
 
+
+User: Create a poll for favorite color between red, blue, and green
+You: create_poll(question="What is your favorite color?", answers=["red", "blue", "green"])
+
 User: Change the bot's avatar
 You: change_bot_avatar(bot_mention=?, url=?)
 
@@ -63,8 +76,12 @@ class MistralAgent:
         # The simplest form of an agent
         # Send the message's content to Mistral's API and return Mistral's response
 
-        channel_members = await self.discord_agent.get_users_in_message(message)
-        channel_mentions = await self.discord_agent.get_channel_mentions_in_message(message)
+         channel_members = []
+         if not message.channel.type == discord.ChannelType.private:
+             channel_members = await self.discord_agent.get_users_in_message(message)
+         channel_mentions = await self.discord_agent.get_channel_mentions_in_message(
+             message
+         )
 
         # send initial message to Mistral
         messages = [
@@ -93,6 +110,35 @@ class MistralAgent:
                 return await self.discord_agent.create_group_chat(
                     message, user_mentions
                 )
+
+
+
+        if "create_poll" in content:
+             print("content: ", content)
+             # extract question
+             question_match = re.search(r"question=\"(.+?)\"", content)
+             if not question_match:
+                 return "No question found. Please specify the question for the poll."
+             question = question_match.group(1)
+ 
+             # extract answers
+             answers_match = re.search(r"answers=\[(.*)\]", content)
+             if not answers_match:
+                 return "No answers found. Please specify the answers for the poll."
+             answers = answers_match.group(1)
+             answers = answers.split(",")
+             answers = [answer.strip().strip("\"'") for answer in answers]
+ 
+             # extract duration
+             duration_match = re.search(r"duration=(\d+)", content)
+             if duration_match:
+                 duration = int(duration_match.group(1))
+                 return await self.discord_agent.create_poll(
+                     message, question, answers, duration
+                 )
+             else:
+                 return await self.discord_agent.create_poll(message, question, answers)
+                 
         if "invite_user_to_channel" in content:
             # Check if there are any mentioned users and channels in the mistral response
             channel_mentions = []
