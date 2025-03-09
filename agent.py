@@ -34,6 +34,11 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         "change_bot_name", 
         "Changes the bot's name.", 
         [("bot_mention", "mention"), ("new_name", "string")]),
+    (
+        "assign_role",
+        "Assigns a role to a user.",
+        [("member", "mention"), ("role_name", "string")],
+    ),
 ]
 
 SYSTEM_PROMPT = f"""
@@ -62,6 +67,12 @@ You: change_bot_avatar(bot_mention=?, url=?)
 
 User: Change the bot @botname name to NewName
 You: change_bot_name(bot_mention=@botname, new_name=NewName)
+
+User: Assign student role to @user1
+You: assign_role(member=@user1, role_name="student")
+
+User: Give @user1 admin role
+You: assign_role(member=@user1, role_name="admin")
 
 """
 
@@ -183,6 +194,20 @@ class MistralAgent:
                 return await self.discord_agent.change_bot_name(message, bot_member, new_name)
             else:
                 await self.discord_agent.handle_change_name(message, bot_member, new_name)
+                return
+
+         if "assign_role" in content:
+            member_match = re.search(r"member=<@!?(\d+)>", content)
+            role_match = re.search(r"role_name=\"([^\"]+)\"", content)
+            
+            member_id = int(member_match.group(1)) if member_match else None
+            role_name = role_match.group(1) if role_match else None
+            member = message.guild.get_member(member_id) if member_id else None
+
+            if member and role_name:
+                return await self.discord_agent.assign_role(message, member, role_name)
+            else:
+                await self.discord_agent.handle_assign_role(message, member, role_name)
                 return
 
          return content
