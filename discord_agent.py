@@ -1,6 +1,7 @@
 from io import BytesIO
 import aiohttp
 import discord
+import datetime
 
 
 class DiscordAgent:
@@ -145,7 +146,26 @@ class DiscordAgent:
         except discord.HTTPException:
             return "Failed to add users to channels. Please try again later."
     
-        
+    async def create_poll(
+         self,
+         message: discord.Message,
+         question: str,
+         answers: list[str],
+         duration: int = 24,  # in hours
+         multiple_answers: bool = False,  # whether multiple answers are allowed
+     ):
+         duration = datetime.timedelta(hours=duration)
+         poll = discord.Poll(
+             question=question,
+             duration=duration,
+         )
+ 
+         for answer in answers:
+             poll.add_answer(text=answer)
+ 
+         await message.reply(poll=poll)
+         return None
+         
     async def change_bot_avatar(self, message: discord.Message, bot_mention: discord.Member, url: str):
         if not bot_mention.bot:
             await message.channel.send("❌ The mentioned user is not a bot.")
