@@ -33,6 +33,11 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         [("user_mentions", "array"), ("channels_mention", "array")],
     ),
     (
+        "unmute_member_from_channel",
+        "Unmute user(s) in exitsing channel.",
+        [("user_mentions", "array"), ("channels_mention", "array")],
+    ),
+    (
         "create_poll",
         "Creates a poll in the channel.",
         [
@@ -86,7 +91,13 @@ User: Add @user1 to #channel1
 You: invite_user_to_channel(user_mentions=[@user1], channel_mentions=[#channel1])
 
 User: Mute @user1 in #channel1
-You: mute_user_from_channel(user_mentions=[@user1], channel_mentions=[#channel1])
+You: mute_member_from_channel(user_mentions=[@user1], channel_mentions=[#channel1])
+
+User: Stop muting @user1 in #channel1
+You: unmute_member_from_channel(user_mentions=[@user1], channel_mentions=[#channel1])
+
+User: Unmute @user1 in #channel1
+You: unmute_member_from_channel(user_mentions=[@user1], channel_mentions=[#channel1])
 
 User: Create a poll for favorite color between red, blue, and green
 You: create_poll(question="What is your favorite color?", answers=["red", "blue", "green"])
@@ -208,6 +219,25 @@ class MistralAgent:
                 return "No user mentioned. Please specify the user(s) you want to add to the channel."
 
             return await self.discord_agent.invite_member_to_channel(message, user_mentions, channel_mentions)
+
+        if "unmute_member_from_channel" in content:
+            # Check if there are any mentioned users and channels in the mistral response
+            channel_mentions = []
+            if match := re.search(r"channel_mentions=\[(.*)\]", content):
+                channel_mentions = match.group(1)
+                channel_mentions = channel_mentions.split(",")
+                channel_mentions = [mention.strip() for mention in channel_mentions]
+            user_mentions = []
+            if match := re.search(r"user_mentions=\[(.*)\]", content):
+                user_mentions = match.group(1)
+                user_mentions = user_mentions.split(",")
+                user_mentions = [mention.strip() for mention in user_mentions]
+            if len(channel_mentions) == 0:
+                return "No channel mentioned. Please specify the channel you want to add new users to."
+            if len(user_mentions) == 0:
+                return "No user mentioned. Please specify the user(s) you want to add to the channel."
+
+            return await self.discord_agent.unmute_member_from_channel(message, user_mentions, channel_mentions)
 
         if "mute_member_from_channel" in content:
             # Check if there are any mentioned users and channels in the mistral response

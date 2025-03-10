@@ -203,6 +203,45 @@ class DiscordAgent:
         except discord.HTTPException:
             return "Failed to mute users to channels. Please try again later."
 
+    async def unmute_member_from_channel(
+        self,
+        message: discord.Message,
+        user_mentions: list[str],
+        channel_mentions: list[str],
+    ):
+
+        discord_users = self.get_user_mentions(user_mentions)
+        # Check if we found any valid users
+        if not discord_users:
+            return "No valid users found. Please check the user IDs."
+
+        channels = self.get_channel_mentions(channel_mentions)
+        # Check if we found any valid channels
+        if not channels:
+            return "No valid channels found. Please check the channel IDs."
+
+        mentioned_users = [user.display_name for user in discord_users]
+        mentioned_channels = [channel.name for channel in channels]
+        res_message = await message.reply(
+            f"Unmuting {', '.join(mentioned_users)} in Channel {', '.join(mentioned_channels)}"
+        )
+
+        try:
+            for channel in channels:
+                # Remove mentioned users from the channel
+                for user in discord_users:
+                    perms = channel.overwrites_for(user)
+                    perms.send_messages = True
+                    await channel.set_permissions(user, overwrite=perms, reason="Unmuted!")
+            await res_message.edit(
+                content=f"Finish unmuting {', '.join(mentioned_users)} in Channel {', '.join(mentioned_channels)}"
+            )
+
+        except discord.Forbidden:
+            return "I don't have permission to unmute users to channels!"
+        except discord.HTTPException:
+            return "Failed to unmute users to channels. Please try again later."
+
     async def create_poll(
         self,
         message: discord.Message,
