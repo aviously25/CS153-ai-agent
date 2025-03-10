@@ -71,6 +71,17 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         "Revokes a role from a user.",
         [("member", "mention"), ("role_name", "string")],
     ),
+    (
+        "create_scheduled_event",
+        "Creates a new scheduled event.",
+        [
+            ("event_name", "string"),
+            ("start_datetime", "string (e.g., '2025-03-10 15:30' or '03/10/2025 3:30 PM')"),
+            ("voice_channel", "string (channel mention or ID)"),
+            ("event_topic", "string")
+            
+        ]
+    )
 ]
 
 SYSTEM_PROMPT = f"""
@@ -125,6 +136,9 @@ You: revoke_role(member=@user1, role_name="admin")
 
 User: Remove moderator role from @user1
 You: revoke_role(member=@user1, role_name="moderator")
+
+User: Schedule an event called "Team Meeting" starting on "2025-03-10 15:30" in <#1234567890> with the topic "Discuss project updates".
+You: create_scheduled_event(event_name="Team Meeting", start_datetime="2025-03-10 15:30", voice_channel=<#1234567890>, event_topic="Discuss project updates")
 
 """
 
@@ -319,7 +333,7 @@ class MistralAgent:
                     message, bot_member, new_name
                 )
             else:
-                await self.discord_agent.handle_change_name(
+                await self.discord_agent.handle_change_bot_name(
                     message, bot_member, new_name
                 )
                 return
@@ -358,5 +372,39 @@ class MistralAgent:
             else:
                 await self.discord_agent.handle_revoke_role(message, member, role_name)
                 return
+            
+            
+        if "create_scheduled_event" in content:
+            event_name_match = re.search(r'event_name="(.+?)"', content)
+            start_datetime_match = re.search(r'start_datetime="(.+?)"', content)
+            event_topic_match = re.search(r'event_topic="(.+?)"', content)
 
+            # Try to extract voice_channel from a command parameter format
+            voice_channel_match = re.search(r'voice_channel=<#\!?(\d+)>', content)
+            # Fallback: if not found, search for any channel mention in the content
+            if not voice_channel_match:
+                voice_channel_match = re.search(r"<#\!?(\d+)>", content)
+
+            missing_params = []
+            if not event_name_match:
+                missing_params.append("event_name")
+            if not start_datetime_match:
+                missing_params.append("start_datetime")
+            if not voice_channel_match:
+                missing_params.append("voice_channel")
+            if not event_topic_match:
+                missing_params.append("event_topic")
+
+            if missing_params:
+                return f"Missing required parameter(s): {', '.join(missing_params)}"
+            
+            event_name = event_name_match.group(1) 
+            start_datetime_str = start_datetime_match.group(1) 
+            event_topic = event_topic_match.group(1) 
+            voice_channel_str = voice_channel_match.group(1) 
+
+            return await self.discord_agent.create_scheduled_event(
+                message, event_name, start_datetime_str, voice_channel_str, event_topic
+            )
+            
         return content

@@ -83,6 +83,8 @@ class DiscordAgent:
             if channel:
                 channels.append(channel)
         return channels
+    
+        
 
     async def create_group_chat(
         self,
@@ -359,7 +361,7 @@ class DiscordAgent:
             "Please use the format: 'change the bot @botname name to <new_name>'"
         )
 
-    async def handle_change_name(
+    async def handle_change_bot_name(
         self,
         message: discord.Message,
         bot_mention: discord.Member = None,
@@ -381,6 +383,7 @@ class DiscordAgent:
             return
 
         await self.change_bot_name(message, bot_mention, new_name)
+
 
     async def assign_role(
         self, message: discord.Message, member: discord.Member, role_name: str
@@ -463,6 +466,7 @@ class DiscordAgent:
             return
 
         await self.assign_role(message, member, role_name)
+
 
     async def create_role(self, message: discord.Message, role_name: str):
         """Creates a new role."""
@@ -664,3 +668,68 @@ class DiscordAgent:
             return "I don't have permission to create channels!"
         except discord.HTTPException as e:
             return f"Failed to create channel: {str(e)}"
+        
+        
+    def parse_datetime(self, dt_str: str) -> datetime.datetime:
+        """Attempt to parse a friendly datetime string using several formats."""
+        formats = [
+            "%Y-%m-%d %H:%M",         # e.g., 2025-03-10 15:30
+            "%m/%d/%Y %I:%M %p",       # e.g., 03/10/2025 3:30 PM
+            "%d/%m/%Y %H:%M",          # e.g., 10/03/2025 15:30
+            "%B %d, %Y %H:%M",         # e.g., March 10, 2025 15:30
+            "%B %d, %Y %I:%M %p"        # e.g., March 10, 2025 3:30 PM
+        ]
+        for fmt in formats:
+            try:
+                dt = datetime.datetime.strptime(dt_str, fmt)
+                # Assuming the provided time is in local time; you can change to your preferred timezone.
+                # Here we assume UTC for simplicity.
+                return dt.replace(tzinfo=datetime.timezone.utc)
+            except ValueError:
+                continue
+        raise ValueError("Time data does not match any supported format.")
+
+
+    async def create_scheduled_event(
+        self,
+        message: discord.Message,
+        event_name: str,
+        start_datetime_str: str,
+        voice_channel_str: str,
+        event_topic: str,
+    ):
+        guild = message.guild
+        if not guild:
+            return "This command can only be used in a server!"
+
+        # Parse the provided friendly date/time string.
+        try:
+            start_time = self.parse_datetime(start_datetime_str)
+        except Exception as e:
+            return f"Invalid date/time format: {str(e)}"
+
+        # Retrieve the voice channel 
+        channel = self.get_channel_by_id(voice_channel_str)
+        if not channel:
+            return "No valid channels found. Please check the channel IDs."
+        # Ensure the channel is a VoiceChannel or StageChannel.
+        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+            return "Provided channel is not a voice or stage channel."
+
+        try:
+            scheduled_event = await guild.create_scheduled_event(
+                name=event_name,
+                start_time=start_time,
+                channel=channel,
+                entity_type=discord.EntityType.voice,  # For voice events.
+                description=event_topic,
+                privacy_level=discord.PrivacyLevel.guild_only,
+            )
+            await message.channel.send(
+                f"Scheduled event **{event_name}** created for {start_time.isoformat()} in {channel.mention}!"
+            )
+            return scheduled_event
+        except discord.Forbidden:
+            return "I don't have permission to create scheduled events!"
+        except discord.HTTPException as e:
+            return f"Failed to create scheduled event: {str(e)}"
