@@ -28,8 +28,8 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
         [("user_mentions", "array"), ("channels_mention", "array")],
     ),
     (
-        "remove_user_from_channel",
-        "Remove user(s) from exitsing channel.",
+        "mute_member_from_channel",
+        "Mute user(s) in exitsing channel.",
         [("user_mentions", "array"), ("channels_mention", "array")],
     ),
     (
@@ -82,9 +82,11 @@ You: create_group_chat(user_mentions=[@user1, @user2])
 User: create a group chat with me and @user1
 You: create_group_chat(user_mentions=[@{{id of the message sender}}, @user1])
 
-User: Add @user1 to @channel1
-You: invite_user_to_channel(user_mentions=[@user1], channel_mentions=[@channel1])
+User: Add @user1 to #channel1
+You: invite_user_to_channel(user_mentions=[@user1], channel_mentions=[#channel1])
 
+User: Mute @user1 in #channel1
+You: mute_user_from_channel(user_mentions=[@user1], channel_mentions=[#channel1])
 
 User: Create a poll for favorite color between red, blue, and green
 You: create_poll(question="What is your favorite color?", answers=["red", "blue", "green"])
@@ -207,7 +209,7 @@ class MistralAgent:
 
             return await self.discord_agent.invite_member_to_channel(message, user_mentions, channel_mentions)
 
-        if "remove_user_from_channel" in content:
+        if "mute_member_from_channel" in content:
             # Check if there are any mentioned users and channels in the mistral response
             channel_mentions = []
             if match := re.search(r"channel_mentions=\[(.*)\]", content):
@@ -224,7 +226,7 @@ class MistralAgent:
             if len(user_mentions) == 0:
                 return "No user mentioned. Please specify the user(s) you want to add to the channel."
 
-            return await self.discord_agent.remove_member_from_channel(message, user_mentions, channel_mentions)
+            return await self.discord_agent.mute_member_from_channel(message, user_mentions, channel_mentions)
 
         if "create_channel" in content:
             # Extract channel name
@@ -273,6 +275,7 @@ class MistralAgent:
             else:
                 await self.discord_agent.handle_change_avatar(message, bot_member, url)
                 return
+
         if "change_bot_name" in content:
             bot_mention_match = re.search(r"bot_mention=<@!?(\d+)>", content)
             new_name_match = re.search(r"new_name=(\w+)", content)

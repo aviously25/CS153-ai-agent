@@ -164,7 +164,7 @@ class DiscordAgent:
         except discord.HTTPException:
             return "Failed to add users to channels. Please try again later."
 
-    async def remove_member_from_channel(
+    async def mute_member_from_channel(
         self,
         message: discord.Message,
         user_mentions: list[str],
@@ -184,22 +184,24 @@ class DiscordAgent:
         mentioned_users = [user.display_name for user in discord_users]
         mentioned_channels = [channel.name for channel in channels]
         res_message = await message.reply(
-            f"Removing {', '.join(mentioned_users)} from Channel {', '.join(mentioned_channels)}"
+            f"Muting {', '.join(mentioned_users)} from Channel {', '.join(mentioned_channels)}"
         )
 
         try:
             for channel in channels:
                 # Remove mentioned users from the channel
                 for user in discord_users:
-                    await channel.remove_user(user)
+                    perms = channel.overwrites_for(user)
+                    perms.send_messages = False
+                    await channel.set_permissions(user, overwrite=perms, reason="Muted!")
             await res_message.edit(
-                content=f"Finished removing {', '.join(mentioned_users)} from Channel {', '.join(mentioned_channels)}"
+                content=f"Finished muting {', '.join(mentioned_users)} from Channel {', '.join(mentioned_channels)}"
             )
 
         except discord.Forbidden:
-            return "I don't have permission to remove users to channels!"
+            return "I don't have permission to mute users to channels!"
         except discord.HTTPException:
-            return "Failed to remove users to channels. Please try again later."
+            return "Failed to mute users to channels. Please try again later."
 
     async def create_poll(
         self,
