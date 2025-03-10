@@ -142,21 +142,19 @@ class DiscordAgent:
         mentioned_users = [user.display_name for user in discord_users]
         mentioned_channels = [channel.name for channel in channels]
         res_message = await message.reply(
-            f"Adding {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}"
+            f"Creating invites for {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}"
         )
 
         try:
+            result_message = ''
             for channel in channels:
+                result_message = result_message.join([channel.name, ":", "\n"])
                 # Add mentioned users to the channel
                 for user in discord_users:
-                    await channel.add_user(user)
-                    # Create mentions for the welcome message
-                    user_mentions_str = ", ".join(
-                        [user.mention for user in discord_users]
-                    )
-                    await channel.send(f"Welcome {user_mentions_str}!")
+                    invite = await channel.create_invite(max_uses=1,unique=True)
+                    result_message = result_message.join([user.name, ":", invite.url, "\n"])
             await res_message.edit(
-                content=f"Finished adding {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}"
+                content=f"Finished creating invites for {', '.join(mentioned_users)} to Channel {', '.join(mentioned_channels)}\nHere are the invite links:\n{result_message}."
             )
 
         except discord.Forbidden:

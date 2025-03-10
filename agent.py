@@ -208,13 +208,13 @@ class MistralAgent:
                 channel_mentions = match.group(1)
                 channel_mentions = channel_mentions.split(",")
                 channel_mentions = [mention.strip() for mention in channel_mentions]
+            if len(channel_mentions) == 0:
+                return "No channel mentioned. Please specify the channel you want to add new users to."
             user_mentions = []
             if match := re.search(r"user_mentions=\[(.*)\]", content):
                 user_mentions = match.group(1)
                 user_mentions = user_mentions.split(",")
                 user_mentions = [mention.strip() for mention in user_mentions]
-            if len(channel_mentions) == 0:
-                return "No channel mentioned. Please specify the channel you want to add new users to."
             if len(user_mentions) == 0:
                 return "No user mentioned. Please specify the user(s) you want to add to the channel."
 
