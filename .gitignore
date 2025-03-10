@@ -11,3 +11,6 @@ wheels/
 
 # Secrets
 .env
+*.env
+cs153/
+discord_agent_draft.py
