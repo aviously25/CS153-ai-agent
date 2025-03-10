@@ -200,7 +200,7 @@ class MistralAgent:
             if len(user_mentions) == 0:
                 return "No user mentioned. Please specify the user(s) you want to add to the channel."
 
-            return await self.discord_agent.create_group_chat(message, user_mentions)
+            return await self.discord_agent.invite_member_to_channel(message, user_mentions, channel_mentions)
 
         if "create_channel" in content:
             # Extract channel name
