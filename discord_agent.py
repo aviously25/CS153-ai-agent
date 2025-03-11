@@ -2,6 +2,9 @@ from io import BytesIO
 import aiohttp
 import discord
 import datetime
+import asyncio
+from typing import Union
+import re  # Add this import
 
 
 class DiscordAgent:
@@ -274,12 +277,12 @@ class DiscordAgent:
             return
 
         try:
-            print(f"Attempting to change avatar for bot {bot_mention.name}")
-            print(f"Image data size: {len(image_data)} bytes")
+            #print(f"Attempting to change avatar for bot {bot_mention.name}")
+            #print(f"Image data size: {len(image_data)} bytes")
             # Use the correct parameter name for changing the avatar
             #await bot_mention.edit(avatar=image_data)
             await self.bot.user.edit(avatar=image_data)
-            print("Avatar change successful")
+            #print("Avatar change successful")
             await message.channel.send(f"✅ Bot avatar changed successfully!")
         except discord.HTTPException as e:
             print(f"Error changing avatar: {str(e)}")
@@ -648,23 +651,40 @@ class DiscordAgent:
         
         
     def parse_datetime(self, dt_str: str) -> datetime.datetime:
-        """Attempt to parse a friendly datetime string using several formats."""
+        """Parse both absolute and relative time formats."""
+        dt_str = dt_str.strip().lower()
+        
+        # Check for relative time format (e.g., "10s", "5m", "1h")
+        relative_match = re.match(r'(\d+)\s*(s|m|h)', dt_str)
+        if relative_match:
+            amount = int(relative_match.group(1))
+            unit = relative_match.group(2)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            
+            if unit == 's':
+                return now + datetime.timedelta(seconds=amount)
+            elif unit == 'm':
+                return now + datetime.timedelta(minutes=amount)
+            elif unit == 'h':
+                return now + datetime.timedelta(hours=amount)
+
+        # Try absolute time formats
         formats = [
-            "%Y-%m-%d %H:%M",         # e.g., 2025-03-10 15:30
-            "%m/%d/%Y %I:%M %p",       # e.g., 03/10/2025 3:30 PM
-            "%d/%m/%Y %H:%M",          # e.g., 10/03/2025 15:30
-            "%B %d, %Y %H:%M",         # e.g., March 10, 2025 15:30
-            "%B %d, %Y %I:%M %p"        # e.g., March 10, 2025 3:30 PM
+            "%Y-%m-%d %H:%M",
+            "%m/%d/%Y %I:%M %p",
+            "%d/%m/%Y %H:%M",
+            "%B %d, %Y %H:%M",
+            "%B %d, %Y %I:%M %p"
         ]
+        
         for fmt in formats:
             try:
                 dt = datetime.datetime.strptime(dt_str, fmt)
-                # Assuming the provided time is in local time; you can change to your preferred timezone.
-                # Here we assume UTC for simplicity.
                 return dt.replace(tzinfo=datetime.timezone.utc)
             except ValueError:
                 continue
-        raise ValueError("Time data does not match any supported format.")
+                
+        raise ValueError("Time data does not match any supported format. Use '10s' for seconds, '5m' for minutes, '1h' for hours, or absolute time.")
 
 
     async def create_scheduled_event(
@@ -710,3 +730,193 @@ class DiscordAgent:
             return "I don't have permission to create scheduled events!"
         except discord.HTTPException as e:
             return f"Failed to create scheduled event: {str(e)}"
+
+    async def get_server_activity_summary(self, message: discord.Message, limit: int = 100):
+        """Generates a detailed summary of recent server activity."""
+        guild = message.guild
+        if not guild:
+            return "This command can only be used in a server!"
+
+        try:
+            # Initialize statistics
+            summary = []
+            total_messages = 0
+            active_channels = {}  # Channel name -> message count
+            active_members = {}   # Member name -> message count
+            media_count = 0
+            emoji_reactions = 0
+            links_shared = 0
+            mentions = 0
+            
+            # Get list of text channels
+            channels = [c for c in guild.channels if isinstance(c, discord.TextChannel)]
+            
+            for channel in channels:
+                try:
+                    messages_in_channel = []
+                    async for msg in channel.history(limit=None):  # Remove limit to get all messages
+                        messages_in_channel.append(msg)
+                        total_messages += 1
+                        
+                        # Track member activity
+                        active_members[msg.author.display_name] = active_members.get(msg.author.display_name, 0) + 1
+                        
+                        # Count attachments
+                        if msg.attachments:
+                            media_count += len(msg.attachments)
+                            
+                        # Count reactions
+                        emoji_reactions += sum(reaction.count for reaction in msg.reactions)
+                        
+                        # Count links
+                        if "http://" in msg.content or "https://" in msg.content:
+                            links_shared += 1
+                            
+                        # Count mentions
+                        mentions += len(msg.mentions) + len(msg.role_mentions) + len(msg.channel_mentions)
+                    
+                    if messages_in_channel:  # Only add channels with messages
+                        active_channels[channel.name] = len(messages_in_channel)
+                except discord.Forbidden:
+                    continue
+
+            # Get member stats
+            total_members = len(guild.members)
+            online_members = len([m for m in guild.members if m.status != discord.Status.offline])
+            bots = len([m for m in guild.members if m.bot])
+            
+            # Get new members (joined in last 24 hours)
+            day_ago = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+            new_members = [member for member in guild.members if member.joined_at and member.joined_at > day_ago]
+
+            # Sort channels and members by activity
+            top_channels = sorted(active_channels.items(), key=lambda x: x[1], reverse=True)[:5]
+            top_members = sorted(active_members.items(), key=lambda x: x[1], reverse=True)[:5]
+
+            # Build detailed summary message
+            summary.append(f"**📊 Server Activity Summary for {guild.name}**\n")
+            
+            # Member Statistics
+            summary.append("**👥 Member Statistics:**")
+            summary.append(f"• Total Members: {total_members}")
+            summary.append(f"• Currently Online: {online_members}")
+            summary.append(f"• Bots: {bots}")
+            summary.append(f"• New Members (24h): {len(new_members)}")
+            if new_members:
+                summary.append(f"• Recent Joins: {', '.join([m.display_name for m in new_members])}")
+            
+            # Activity Statistics
+            summary.append("\n**📈 Activity Statistics:**")
+            summary.append(f"• Total Messages: {total_messages}")
+            summary.append(f"• Media Shared: {media_count}")
+            summary.append(f"• Reactions Added: {emoji_reactions}")
+            summary.append(f"• Links Shared: {links_shared}")
+            summary.append(f"• Mentions: {mentions}")
+            summary.append(f"• Active Channels: {len(active_channels)}")
+            
+            # Top Channels
+            summary.append("\n**📝 Most Active Channels:**")
+            for channel_name, count in top_channels:
+                summary.append(f"• #{channel_name}: {count} messages")
+            
+            # Top Members
+            summary.append("\n**🏆 Most Active Members:**")
+            for member_name, count in top_members:
+                summary.append(f"• {member_name}: {count} messages")
+
+            return "\n".join(summary)
+
+        except discord.Forbidden:
+            return "❌ I don't have permission to read message history!"
+        except discord.HTTPException as e:
+            return f"❌ Failed to generate summary: {str(e)}"
+
+    async def send_automated_message(
+        self,
+        message: discord.Message,
+        target_type: str,
+        target: Union[discord.Member, discord.TextChannel],
+        msg_content: str,
+        schedule_time: str = None
+    ):
+        """Sends automated messages to users or channels."""
+        try:
+            # Parse schedule time if provided
+            scheduled_time = None
+            if schedule_time:
+                try:
+                    scheduled_time = self.parse_datetime(schedule_time)
+                    # Check if time is in the future
+                    if scheduled_time <= datetime.datetime.now(datetime.timezone.utc):
+                        return "❌ Schedule time must be in the future!"
+                except ValueError as e:
+                    return f"❌ Invalid time format: {str(e)}"
+
+            if target_type.lower() == "dm":
+                if not isinstance(target, discord.Member):
+                    return "❌ Invalid target for DM message!"
+                
+                if scheduled_time:
+                    # Calculate delay in seconds
+                    delay = (scheduled_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+                    await asyncio.sleep(delay)
+                
+                await target.send(msg_content)
+                return f"✅ Message {'scheduled to be ' if schedule_time else ''}sent to {target.display_name}'s DMs!"
+
+            elif target_type.lower() == "channel":
+                if not isinstance(target, discord.TextChannel):
+                    return "❌ Invalid target channel!"
+                
+                if scheduled_time:
+                    delay = (scheduled_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+                    await asyncio.sleep(delay)
+                
+                await target.send(msg_content)
+                return f"✅ Message {'scheduled to be ' if schedule_time else ''}sent to #{target.name}!"
+
+            return "❌ Invalid target type! Use 'dm' or 'channel'."
+
+        except discord.Forbidden:
+            return "❌ I don't have permission to send messages to this target!"
+        except discord.HTTPException as e:
+            return f"❌ Failed to send message: {str(e)}"
+
+    async def send_welcome_message(
+        self, 
+        message: discord.Message, 
+        target_member: discord.Member,
+        custom_message: str = None
+    ):
+        """Sends a welcome message to a new member."""
+        default_welcome = (
+            f"Welcome to {message.guild.name}, {target_member.mention}! 👋\n"
+            f"We hope you enjoy your stay! Feel free to introduce yourself."
+        )
+        
+        try:
+            await target_member.send(custom_message or default_welcome)
+            return f"✅ Welcome message sent to {target_member.display_name}!"
+        except discord.Forbidden:
+            return "❌ Cannot send DM to this user!"
+        except discord.HTTPException as e:
+            return f"❌ Failed to send welcome message: {str(e)}"
+
+    async def change_channel_name(
+        self,
+        message: discord.Message,
+        channel: discord.TextChannel,
+        new_name: str,
+    ):
+        """Changes a channel's name."""
+        if not message.guild.me.guild_permissions.manage_channels:
+            return "❌ I need the `Manage Channels` permission to rename channels!"
+
+        try:
+            old_name = channel.name
+            await channel.edit(name=new_name.lower().replace(" ", "-"))
+            return f"✅ Successfully renamed #{old_name} to #{new_name}!"
+        except discord.Forbidden:
+            return "❌ I don't have permission to rename this channel!"
+        except discord.HTTPException as e:
+            return f"❌ Failed to rename channel: {str(e)}"

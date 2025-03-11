@@ -81,7 +81,38 @@ POSSIBLE_COMMANDS = [  # (command_name, description, arguments)
             ("event_topic", "string")
             
         ]
-    )
+    ),
+    (
+        "summarize_server_activity",
+        "Generates a summary of recent server activity.",
+        []
+    ),
+    (
+        "send_automated_message",
+        "Sends or schedules automated messages.",
+        [
+            ("target_type", "string: 'dm' or 'channel'"),
+            ("target", "mention: user or channel"),
+            ("message", "string"),
+            ("schedule_time", "optional string: time to send message"),
+        ]
+    ),
+    (
+        "send_welcome_message",
+        "Sends a welcome message to a user.",
+        [
+            ("target", "mention"),
+            ("custom_message", "optional string"),
+        ]
+    ),
+    (
+        "change_channel_name",
+        "Changes a channel's name.",
+        [
+            ("channel", "channel mention"),
+            ("new_name", "string"),
+        ]
+    ),
 ]
 
 SYSTEM_PROMPT = f"""
@@ -148,6 +179,33 @@ You: change_bot_avatar(bot_mention=@botname)
 
 User: Change the bot @botname avatar [uploaded an image]
 You: change_bot_avatar(bot_mention=@botname)
+
+User: summarize server activity
+You: summarize_server_activity()
+
+User: send a welcome message to @user1
+You: send_welcome_message(target=@user1)
+
+User: send a welcome message to @user1 saying "Welcome aboard!"
+You: send_welcome_message(target=@user1, custom_message="Welcome aboard!")
+
+User: send "Meeting in 5 minutes" to #announcements at 2:30 PM
+You: send_automated_message(target_type="channel", target=#announcements, message="Meeting in 5 minutes", schedule_time="2:30 PM")
+
+User: dm @user1 "Don't forget about the meeting!"
+You: send_automated_message(target_type="dm", target=@user1, message="Don't forget about the meeting!")
+
+User: rename #general to announcements
+You: change_channel_name(channel=#general, new_name="announcements")
+
+User: send "Good morning!" to #announcements in 5 minutes
+You: send_automated_message(target_type="channel", target=#announcements, message="Good morning!", schedule_time="5m")
+
+User: dm @user1 "Meeting starts" in 30 seconds
+You: send_automated_message(target_type="dm", target=@user1, message="Meeting starts", schedule_time="30s")
+
+User: send "Going live!" to #announcements in 1 hour
+You: send_automated_message(target_type="channel", target=#announcements, message="Going live!", schedule_time="1h")
 
 """
 
@@ -322,11 +380,11 @@ class MistralAgent:
             # Get the uploaded image
             image_data = None
             if message.attachments:
-                print(f"Found {len(message.attachments)} attachments")
-                print(f"First attachment type: {message.attachments[0].content_type}")
-                print(f"First attachment size: {message.attachments[0].size} bytes")
+                #print(f"Found {len(message.attachments)} attachments")
+                #print(f"First attachment type: {message.attachments[0].content_type}")
+                #print(f"First attachment size: {message.attachments[0].size} bytes")
                 image_data = await message.attachments[0].read()
-                print(f"Successfully read image data: {len(image_data)} bytes")
+                #print(f"Successfully read image data: {len(image_data)} bytes")
 
             # If we have a bot mention and an image, change the avatar
             if bot_member and image_data:
@@ -426,4 +484,85 @@ class MistralAgent:
                 message, event_name, start_datetime_str, voice_channel_str, event_topic
             )
             
+        if "summarize_server_activity" in content:
+            return await self.discord_agent.get_server_activity_summary(message)
+
+        if "send_automated_message" in content:
+            target_type_match = re.search(r'target_type="(.+?)"', content)
+            target_match = re.search(r'target=([^,\)]+)', content)
+            message_match = re.search(r'message="(.+?)"', content)
+            schedule_match = re.search(r'schedule_time="(.+?)"', content)
+
+            if not all([target_type_match, target_match, message_match]):
+                return "Missing required parameters for automated message!"
+
+            target_type = target_type_match.group(1)
+            msg_content = message_match.group(1)
+            schedule_time = schedule_match.group(1) if schedule_match else None
+            target_str = target_match.group(1).strip()
+
+            # Get target based on type
+            target = None
+            if target_type == "dm":
+                user_match = re.search(r'<@!?(\d+)>', target_str)
+                if not user_match:
+                    return "❌ Invalid user mention format!"
+                try:
+                    user_id = int(user_match.group(1))
+                    target = message.guild.get_member(user_id)
+                except (ValueError, AttributeError):
+                    return "❌ Could not parse user ID!"
+            else:  # channel
+                channel_match = re.search(r'<#!?(\d+)>', target_str)
+                if not channel_match:
+                    return "❌ Invalid channel mention format!"
+                try:
+                    channel_id = int(channel_match.group(1))
+                    target = message.guild.get_channel(channel_id)
+                except (ValueError, AttributeError):
+                    return "❌ Could not parse channel ID!"
+
+            if not target:
+                return f"❌ Could not find the specified {'user' if target_type == 'dm' else 'channel'}!"
+
+            return await self.discord_agent.send_automated_message(
+                message, target_type, target, msg_content, schedule_time
+            )
+
+        if "send_welcome_message" in content:
+            target_match = re.search(r'target=<@!?(\d+)>', content)
+            message_match = re.search(r'custom_message="(.+?)"', content)
+
+            if not target_match:
+                return "Please specify a target user!"
+
+            target_id = int(target_match.group(1))
+            target_member = message.guild.get_member(target_id)
+            custom_message = message_match.group(1) if message_match else None
+
+            return await self.discord_agent.send_welcome_message(
+                message, target_member, custom_message
+            )
+
+        if "change_channel_name" in content:
+            channel_match = re.search(r'channel=<#!?(\d+)>', content)
+            name_match = re.search(r'new_name="(.+?)"', content)
+
+            if not all([channel_match, name_match]):
+                return "❌ Please provide both channel and new name!"
+            
+            try:
+                channel_id = int(channel_match.group(1))
+                channel = message.guild.get_channel(channel_id)
+                new_name = name_match.group(1)
+
+                if not channel:
+                    return "❌ Could not find the specified channel!"
+                
+                return await self.discord_agent.change_channel_name(
+                    message, channel, new_name
+                )
+            except (ValueError, AttributeError):
+                return "❌ Invalid channel mention or name format!"
+
         return content
