@@ -52,11 +52,12 @@ async def on_message(message: discord.Message):
     # Don't delete this line! It's necessary for the bot to process commands.
     await bot.process_commands(message)
 
-    # Ignore messages from self or other bots to prevent infinite loops.
+    # Ignore messages from self or other bots to prevent infinite loops
     if (
-        message.author.bot
-        or message.content.startswith("!")
+        message.author.bot # Ignore messages if it's from the bot
+        or message.content.startswith("!") # Ignore messages if it's a generic command
         or message.author.id != USER_ID  # Ignore messages from other users
+        or bot.user not in message.mentions # Ignore messages if it's not mentioning the bot
     ):
         return
 
