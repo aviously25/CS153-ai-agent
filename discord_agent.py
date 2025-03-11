@@ -707,20 +707,26 @@ class DiscordAgent:
         # Ensure the channel is a VoiceChannel or StageChannel.
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             return "Provided channel is not a voice or stage channel."
+        
+        # Set the appropriate scheduled event type.
+        if isinstance(channel, discord.VoiceChannel):
+            event_type = discord.EntityType.voice
+        elif isinstance(channel, discord.StageChannel):
+            event_type = discord.EntityType.stage_instance
 
         try:
             scheduled_event = await guild.create_scheduled_event(
                 name=event_name,
                 start_time=start_time,
                 channel=channel,
-                entity_type=discord.EntityType.voice,  # For voice events.
+                entity_type=event_type, 
                 description=event_topic,
                 privacy_level=discord.PrivacyLevel.guild_only,
             )
             await message.channel.send(
                 f"Scheduled event **{event_name}** created for {start_time.isoformat()} in {channel.mention}!"
             )
-            return scheduled_event
+            return "Successfully scheduled event!"
         except discord.Forbidden:
             return "I don't have permission to create scheduled events!"
         except discord.HTTPException as e:
