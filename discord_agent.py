@@ -263,72 +263,49 @@ class DiscordAgent:
         return None
 
     async def change_bot_avatar(
-        self, message: discord.Message, bot_mention: discord.Member, url: str
+        self, message: discord.Message, bot_mention: discord.Member, image_data: bytes
     ):
         if not bot_mention.bot:
             await message.channel.send("❌ The mentioned user is not a bot.")
             return
 
-        # Clean up URL
-        url = url.strip().strip("\"'")
-
-        # Validate URL format
-        if not url.startswith(("http://", "https://")):
-            await message.channel.send(
-                "❌ Invalid URL format. URL must start with http:// or https://"
-            )
+        if not image_data:
+            await message.channel.send("❌ Please attach an image to change the bot's avatar.")
             return
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept": "image/*",
-        }
-
-        async with aiohttp.ClientSession(headers=headers) as session:
-            try:
-                async with session.get(url, ssl=False) as response:
-                    if response.status == 200:
-                        if not response.headers.get("content-type", "").startswith(
-                            "image/"
-                        ):
-                            await message.channel.send(
-                                "❌ The URL does not point to a valid image."
-                            )
-                            return
-
-                        avatar_data = await response.read()
-                        try:
-                            await message.guild.me.edit(avatar=avatar_data)
-                            await message.channel.send(
-                                f"✅ Bot avatar changed successfully!"
-                            )
-                        except discord.HTTPException as e:
-                            await message.channel.send(
-                                f"❌ Error changing avatar: {str(e)}"
-                            )
-                    else:
-                        await message.channel.send(
-                            f"❌ Failed to fetch image. Status code: {response.status}"
-                        )
-            except aiohttp.ClientError as e:
-                await message.channel.send(f"❌ Error accessing URL: {str(e)}")
+        try:
+            print(f"Attempting to change avatar for bot {bot_mention.name}")
+            print(f"Image data size: {len(image_data)} bytes")
+            # Use the correct parameter name for changing the avatar
+            #await bot_mention.edit(avatar=image_data)
+            await self.bot.user.edit(avatar=image_data)
+            print("Avatar change successful")
+            await message.channel.send(f"✅ Bot avatar changed successfully!")
+        except discord.HTTPException as e:
+            print(f"Error changing avatar: {str(e)}")
+            await message.channel.send(f"❌ Error changing avatar: {str(e)}")
 
     async def prompt_change_avatar(self, message: discord.Message):
         await message.channel.send(
-            "Please mention the bot and provide the image URL to change its avatar."
+            "Please mention the bot and upload an image to change its avatar."
         )
 
     async def handle_change_avatar(
-        self,
-        message: discord.Message,
+        self, 
+        message: discord.Message, 
         bot_mention: discord.Member = None,
-        url: str = None,
+        image_data: bytes = None,
     ):
-        if not bot_mention or not url:
-            await self.prompt_change_avatar(message)
-            return
+        user_id = message.author.id
 
-        await self.change_bot_avatar(message, bot_mention, url)
+        # If we have both bot and image, proceed with change
+        if bot_mention and bot_mention.bot and image_data:
+            await self.change_bot_avatar(message, bot_mention, image_data)
+            return
+        
+        # Just prompt for complete instructions if anything is missing
+        await self.prompt_change_avatar(message)
+        return
 
     async def change_bot_name(
         self,

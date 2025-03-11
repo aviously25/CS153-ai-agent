@@ -140,6 +140,15 @@ You: revoke_role(member=@user1, role_name="moderator")
 User: Schedule an event called "Team Meeting" starting on "2025-03-10 15:30" in <#1234567890> with the topic "Discuss project updates".
 You: create_scheduled_event(event_name="Team Meeting", start_datetime="2025-03-10 15:30", voice_channel=<#1234567890>, event_topic="Discuss project updates")
 
+User: Change the bot's avatar
+You: change_bot_avatar(bot_mention=?)
+
+User: Change the bot @botname avatar 
+You: change_bot_avatar(bot_mention=@botname)
+
+User: Change the bot @botname avatar [uploaded an image]
+You: change_bot_avatar(bot_mention=@botname)
+
 """
 
 
@@ -306,19 +315,29 @@ class MistralAgent:
             )
 
         if "change_bot_avatar" in content:
-            url_match = re.search(r"url=(https?://\S+)", content)
             bot_mention_match = re.search(r"bot_mention=<@!?(\d+)>", content)
-            url = url_match.group(1) if url_match else None
             bot_id = int(bot_mention_match.group(1)) if bot_mention_match else None
             bot_member = message.guild.get_member(bot_id) if bot_id else None
 
-            if bot_member and bot_member.bot and url:
+            # Get the uploaded image
+            image_data = None
+            if message.attachments:
+                print(f"Found {len(message.attachments)} attachments")
+                print(f"First attachment type: {message.attachments[0].content_type}")
+                print(f"First attachment size: {message.attachments[0].size} bytes")
+                image_data = await message.attachments[0].read()
+                print(f"Successfully read image data: {len(image_data)} bytes")
+
+            # If we have a bot mention and an image, change the avatar
+            if bot_member and image_data:
                 return await self.discord_agent.change_bot_avatar(
-                    message, bot_member, url
+                    message, bot_member, image_data
                 )
-            else:
-                await self.discord_agent.handle_change_avatar(message, bot_member, url)
-                return
+            elif not bot_member:
+                await message.channel.send("❌ Please mention the bot whose avatar you want to change.")
+            elif not image_data:
+                await message.channel.send("❌ Please attach an image to change the bot's avatar.")
+            return
 
         if "change_bot_name" in content:
             bot_mention_match = re.search(r"bot_mention=<@!?(\d+)>", content)
