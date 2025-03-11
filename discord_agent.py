@@ -269,28 +269,24 @@ class DiscordAgent:
         self, message: discord.Message, bot_mention: discord.Member, image_data: bytes
     ):
         if not bot_mention.bot:
-            await message.channel.send("❌ The mentioned user is not a bot.")
+            await message.channel.send("The mentioned user is not a bot.")
             return
 
         if not image_data:
-            await message.channel.send("❌ Please attach an image to change the bot's avatar.")
+            await message.channel.send("Please attach an image to change the bot's avatar.")
             return
 
         try:
-            #print(f"Attempting to change avatar for bot {bot_mention.name}")
-            #print(f"Image data size: {len(image_data)} bytes")
-            # Use the correct parameter name for changing the avatar
-            #await bot_mention.edit(avatar=image_data)
             await self.bot.user.edit(avatar=image_data)
-            #print("Avatar change successful")
-            await message.channel.send(f"✅ Bot avatar changed successfully!")
+            await message.channel.send(f"Bot avatar changed successfully!")
         except discord.HTTPException as e:
             print(f"Error changing avatar: {str(e)}")
-            await message.channel.send(f"❌ Error changing avatar: {str(e)}")
+            await message.channel.send(f"Error changing avatar: {str(e)}")
 
     async def prompt_change_avatar(self, message: discord.Message):
         await message.channel.send(
-            "Please mention the bot and upload an image to change its avatar."
+            "Please mention the bot and upload an image to change its avatar.\n"
+            "Example: 'change bot avatar @botname' (attach an image file)"
         )
 
     async def handle_change_avatar(
@@ -318,31 +314,29 @@ class DiscordAgent:
     ):
         """Changes a bot's name."""
         if not bot_mention or not bot_mention.bot:
-            await message.channel.send("❌ Please specify a valid bot to rename.")
+            await message.channel.send("Please specify a valid bot to rename.")
             await self.prompt_change_name(message)
             return
 
         if not new_name or not new_name.strip() or not 2 <= len(new_name) <= 32:
-            await message.channel.send("❌ Please provide a valid new name (2-32 characters).")
+            await message.channel.send("Please provide a valid new name (2-32 characters).")
             await self.prompt_change_name(message)
             return
 
         try:
             old_name = bot_mention.display_name
             await bot_mention.edit(nick=new_name)
-            return f"✅ Successfully changed bot's name from **{old_name}** to **{new_name}**!"
+            return f"Successfully changed bot's name from **{old_name}** to **{new_name}**!"
         except discord.Forbidden:
-            return "❌ I don't have permission to change the bot's name."
+            return "I don't have permission to change the bot's name."
         except discord.HTTPException as e:
-            return f"❌ Failed to change name: {str(e)}"
+            return f"Failed to change name: {str(e)}"
 
     async def prompt_change_name(self, message: discord.Message):
         """Sends a help message for bot name changes."""
         await message.channel.send(
-            "To change a bot's name, use the format:\n"
-            "• change the bot @botname name to NewName\n"
-            "Note: Name must be 2-32 characters long and can contain letters, numbers, underscores, and hyphens."
-        )
+            "To change a bot's name, please provide the bot mention or specify the bot name and the new name.\n"
+            "Example: 'change bot name @botname New Bot Name'")
 
     async def handle_change_bot_name(
         self,
@@ -352,16 +346,16 @@ class DiscordAgent:
     ):
         if not bot_mention and not new_name:
             await message.channel.send(
-                "❌ Please mention the bot and provide a new name."
+                "Please mention the bot and provide a new name."
             )
             await self.prompt_change_name(message)
             return
         elif not bot_mention:
-            await message.channel.send("❌ Please mention the bot you want to rename.")
+            await message.channel.send("Please mention the bot you want to rename.")
             await self.prompt_change_name(message)
             return
         elif not new_name:
-            await message.channel.send("❌ Please provide a new name for the bot.")
+            await message.channel.send("Please provide a new name for the bot.")
             await self.prompt_change_name(message)
             return
 
@@ -374,34 +368,33 @@ class DiscordAgent:
         """Assigns a role to a member."""
         if not message.guild.me.guild_permissions.manage_roles:
             await message.channel.send(
-                "❌ I need the `Manage Roles` permission to assign roles."
+                "I need the `Manage Roles` permission to assign roles."
             )
             return
 
         role = discord.utils.get(message.guild.roles, name=role_name)
         if not role:
             await message.channel.send(
-                f"❌ Role '{role_name}' not found! Available roles: {', '.join([r.name for r in message.guild.roles])}"
+                f"Role '{role_name}' not found! Available roles: {', '.join([r.name for r in message.guild.roles])}"
             )
             return
 
         try:
             await member.add_roles(role)
             await message.channel.send(
-                f"✅ Successfully assigned the **{role.name}** role to {member.display_name}!"
+                f"Successfully assigned the **{role.name}** role to {member.display_name}!"
             )
         except discord.Forbidden:
             await message.channel.send(
-                "❌ I don't have permission to assign this role."
+                "I don't have permission to assign this role."
             )
         except discord.HTTPException as e:
-            await message.channel.send(f"❌ Failed to assign role: {str(e)}")
+            await message.channel.send(f"Failed to assign role: {str(e)}")
 
     async def prompt_assign_role(self, message: discord.Message):
         await message.channel.send(
-            "To assign a role, use one of these formats:\n"
-            "1. 'assign <role_name> role to @user'\n"
-            "2. First mention the role, then the user\n"
+            "To assign a role, please provide the user mention or specify the user's name and the role name\n"
+            "Example: 'assign role @username role_name'\n"
             f"Available roles: {', '.join([r.name for r in message.guild.roles])}"
         )
 
@@ -423,7 +416,7 @@ class DiscordAgent:
         # Handle response when waiting for member
         if user_id in self.waiting_for_member:
             if not message.mentions:
-                await message.channel.send("❌ Please mention the user using @username")
+                await message.channel.send("Please mention the user using @username")
                 return
             role_name = self.waiting_for_member.pop(user_id)
             await self.assign_role(message, message.mentions[0], role_name)
@@ -431,7 +424,7 @@ class DiscordAgent:
 
         # Initial request handling
         if not member and not role_name:
-            await message.channel.send("❌ Please specify both the role and the user.")
+            await message.channel.send("Please specify both the role and the user.")
             await self.prompt_assign_role(message)
             return
         elif not member:
@@ -455,7 +448,7 @@ class DiscordAgent:
         """Creates a new role."""
         if not message.guild.me.guild_permissions.manage_roles:
             await message.channel.send(
-                "❌ I need the `Manage Roles` permission to create roles."
+                "I need the `Manage Roles` permission to create roles."
             )
             return
 
@@ -467,11 +460,11 @@ class DiscordAgent:
 
         try:
             await message.guild.create_role(name=role_name)
-            await message.channel.send(f"✅ Successfully created role **{role_name}**!")
+            await message.channel.send(f"Successfully created role **{role_name}**!")
         except discord.Forbidden:
-            await message.channel.send("❌ I don't have permission to create roles.")
+            await message.channel.send("I don't have permission to create roles.")
         except discord.HTTPException as e:
-            await message.channel.send(f"❌ Failed to create role: {str(e)}")
+            await message.channel.send(f"Failed to create role: {str(e)}")
 
     async def prompt_create_role(self, message: discord.Message):
         await message.channel.send("What should the new role be called?")
@@ -500,40 +493,39 @@ class DiscordAgent:
         """Revokes a role from a member."""
         if not message.guild.me.guild_permissions.manage_roles:
             await message.channel.send(
-                "❌ I need the `Manage Roles` permission to revoke roles."
+                "I need the `Manage Roles` permission to revoke roles."
             )
             return
 
         role = discord.utils.get(message.guild.roles, name=role_name)
         if not role:
             await message.channel.send(
-                f"❌ Role '{role_name}' not found! Available roles: {', '.join([r.name for r in message.guild.roles])}"
+                f"Role '{role_name}' not found! Available roles: {', '.join([r.name for r in message.guild.roles])}"
             )
             return
 
         if role not in member.roles:
             await message.channel.send(
-                f"❌ {member.display_name} doesn't have the role '{role_name}'"
+                f"{member.display_name} doesn't have the role '{role_name}'"
             )
             return
 
         try:
             await member.remove_roles(role)
             await message.channel.send(
-                f"✅ Successfully removed the **{role.name}** role from {member.display_name}!"
+                f"Successfully removed the **{role.name}** role from {member.display_name}!"
             )
         except discord.Forbidden:
             await message.channel.send(
-                "❌ I don't have permission to revoke this role."
+                "I don't have permission to revoke this role."
             )
         except discord.HTTPException as e:
-            await message.channel.send(f"❌ Failed to revoke role: {str(e)}")
+            await message.channel.send(f"Failed to revoke role: {str(e)}")
 
     async def prompt_revoke_role(self, message: discord.Message):
         await message.channel.send(
-            "To revoke a role, use one of these formats:\n"
-            "1. 'revoke <role_name> role from @user'\n"
-            "2. First mention the role to revoke, then the user\n"
+            "To revoke a role, please provide the user mention or specify the user's name and the role name\n"
+            "Example: 'revoke role @username role_name'\n"
             f"Available roles: {', '.join([r.name for r in message.guild.roles])}"
         )
 
@@ -555,7 +547,7 @@ class DiscordAgent:
         # Handle response when waiting for member
         if user_id in self.waiting_for_revoke_member:
             if not message.mentions:
-                await message.channel.send("❌ Please mention the user using @username")
+                await message.channel.send("Please mention the user using @username")
                 return
             role_name = self.waiting_for_revoke_member.pop(user_id)
             await self.revoke_role(message, message.mentions[0], role_name)
@@ -563,7 +555,7 @@ class DiscordAgent:
 
         # Initial request handling
         if not member and not role_name:
-            await message.channel.send("❌ Please specify both the role and the user.")
+            await message.channel.send("Please specify both the role and the user.")
             await self.prompt_revoke_role(message)
             return
         elif not member:
@@ -830,9 +822,9 @@ class DiscordAgent:
             return "\n".join(summary)
 
         except discord.Forbidden:
-            return "❌ I don't have permission to read message history!"
+            return "I don't have permission to read message history!"
         except discord.HTTPException as e:
-            return f"❌ Failed to generate summary: {str(e)}"
+            return f"Failed to generate summary: {str(e)}"
 
     def find_user(self, guild: discord.Guild, user_identifier: str) -> discord.Member:
         """Find user by mention, name, display name, or nickname."""
@@ -876,15 +868,15 @@ class DiscordAgent:
                 try:
                     scheduled_time = self.parse_datetime(schedule_time)
                     if scheduled_time <= datetime.datetime.now(datetime.timezone.utc):
-                        return "❌ Schedule time must be in the future!"
+                        return "Schedule time must be in the future!"
                 except ValueError as e:
-                    return f"❌ Invalid time format: {str(e)}"
+                    return f"Invalid time format: {str(e)}"
 
             if target_type.lower() == "dm":
                 if isinstance(target, str):
                     target = self.find_user(message.guild, target)
                 if not target or not isinstance(target, discord.Member):
-                    return f"❌ Could not find user! Use @mention or username. Example: @username or username"
+                    return f"Could not find user! Use @mention or username. Example: @username or username"
 
                 try:
                     if scheduled_time:
@@ -896,29 +888,29 @@ class DiscordAgent:
                         dm_channel = await target.create_dm()
                     
                     await dm_channel.send(msg_content)
-                    return f"✅ Message {'scheduled to be ' if schedule_time else ''}sent to {target.display_name}'s DMs!"
+                    return f"Message {'scheduled to be ' if schedule_time else ''}sent to {target.display_name}'s DMs!"
                 except discord.Forbidden:
-                    return "❌ Cannot send DM to this user! They may have DMs disabled."
+                    return "Cannot send DM to this user! They may have DMs disabled."
                 except Exception as e:
-                    return f"❌ Failed to send DM: {str(e)}"
+                    return f"Failed to send DM: {str(e)}"
 
             elif target_type.lower() == "channel":
                 if not isinstance(target, discord.TextChannel):
-                    return "❌ Invalid target channel!"
+                    return "Invalid target channel!"
                 
                 if scheduled_time:
                     delay = (scheduled_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
                     await asyncio.sleep(delay)
                 
                 await target.send(msg_content)
-                return f"✅ Message {'scheduled to be ' if schedule_time else ''}sent to #{target.name}!"
+                return f"Message {'scheduled to be ' if schedule_time else ''}sent to #{target.name}!"
 
-            return "❌ Invalid target type! Use 'dm' or 'channel'."
+            return "Invalid target type! Use 'dm' or 'channel'."
 
         except discord.Forbidden:
-            return "❌ I don't have permission to send messages to this target!"
+            return "I don't have permission to send messages to this target!"
         except discord.HTTPException as e:
-            return f"❌ Failed to send message: {str(e)}"
+            return f"Failed to send message: {str(e)}"
 
     async def send_welcome_message(
         self, 
@@ -934,11 +926,11 @@ class DiscordAgent:
         
         try:
             await target_member.send(custom_message or default_welcome)
-            return f"✅ Welcome message sent to {target_member.display_name}!"
+            return f"Welcome message sent to {target_member.display_name}!"
         except discord.Forbidden:
-            return "❌ Cannot send DM to this user!"
+            return "Cannot send DM to this user!"
         except discord.HTTPException as e:
-            return f"❌ Failed to send welcome message: {str(e)}"
+            return f"Failed to send welcome message: {str(e)}"
 
     async def change_channel_name(
         self,
@@ -948,13 +940,13 @@ class DiscordAgent:
     ):
         """Changes a channel's name."""
         if not message.guild.me.guild_permissions.manage_channels:
-            return "❌ I need the `Manage Channels` permission to rename channels!"
+            return "I need the `Manage Channels` permission to rename channels!"
 
         try:
             old_name = channel.name
             await channel.edit(name=new_name.lower().replace(" ", "-"))
-            return f"✅ Successfully renamed #{old_name} to #{new_name}!"
+            return f"Successfully renamed #{old_name} to #{new_name}!"
         except discord.Forbidden:
-            return "❌ I don't have permission to rename this channel!"
+            return "I don't have permission to rename this channel!"
         except discord.HTTPException as e:
-            return f"❌ Failed to rename channel: {str(e)}"
+            return f"Failed to rename channel: {str(e)}"

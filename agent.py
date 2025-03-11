@@ -423,11 +423,7 @@ Sender: {message.author.id}"""}
             # Get the uploaded image
             image_data = None
             if message.attachments:
-                #print(f"Found {len(message.attachments)} attachments")
-                #print(f"First attachment type: {message.attachments[0].content_type}")
-                #print(f"First attachment size: {message.attachments[0].size} bytes")
                 image_data = await message.attachments[0].read()
-                #print(f"Successfully read image data: {len(image_data)} bytes")
 
             # If we have a bot mention and an image, change the avatar
             if bot_member and image_data:
@@ -435,9 +431,9 @@ Sender: {message.author.id}"""}
                     message, bot_member, image_data
                 )
             elif not bot_member:
-                await message.channel.send("❌ Please mention the bot whose avatar you want to change.")
+                await message.channel.send("Please mention the bot whose avatar you want to change.")
             elif not image_data:
-                await message.channel.send("❌ Please attach an image to change the bot's avatar.")
+                await message.channel.send("Please attach an image to change the bot's avatar.")
             return
 
         if "change_bot_name" in content:
@@ -463,19 +459,19 @@ Sender: {message.author.id}"""}
             
             # Additional validation
             if target and not target.bot:
-                await message.channel.send("❌ The specified user is not a bot.")
+                await message.channel.send("The specified user is not a bot.")
                 return
             elif new_name and not 2 <= len(new_name) <= 32:
-                await message.channel.send("❌ Bot name must be between 2 and 32 characters.")
+                await message.channel.send("Bot name must be between 2 and 32 characters.")
                 return
 
             if target and target.bot and new_name:
                 return await self.discord_agent.change_bot_name(message, target, new_name)
             elif not target:
-                await message.channel.send("❌ Please mention or specify the bot you want to rename.")
+                await message.channel.send("Please mention or specify the bot you want to rename.")
                 await self.discord_agent.prompt_change_name(message)
             elif not new_name:
-                await message.channel.send(f"❌ Please specify a valid new name for {target.display_name}.")
+                await message.channel.send(f"Please specify a valid new name for {target.display_name}.")
                 await self.discord_agent.prompt_change_name(message)
             return
 
@@ -573,15 +569,15 @@ Sender: {message.author.id}"""}
             else:  # channel
                 channel_match = re.search(r'<#!?(\d+)>', target_str)
                 if not channel_match:
-                    return "❌ Invalid channel mention format!"
+                    return "Invalid channel mention format!"
                 try:
                     channel_id = int(channel_match.group(1))
                     target = message.guild.get_channel(channel_id)
                 except (ValueError, AttributeError):
-                    return "❌ Could not parse channel ID!"
+                    return "Could not parse channel ID!"
 
             if not target:
-                return f"❌ Could not find the specified {'user' if target_type == 'dm' else 'channel'}!"
+                return f"Could not find the specified {'user' if target_type == 'dm' else 'channel'}!"
 
             return await self.discord_agent.send_automated_message(
                 message, target_type, target, msg_content, schedule_time
@@ -607,7 +603,7 @@ Sender: {message.author.id}"""}
             name_match = re.search(r'new_name="(.+?)"', content)
 
             if not all([channel_match, name_match]):
-                return "❌ Please provide both channel and new name!"
+                return "Please provide both channel and new name!"
             
             try:
                 channel_id = int(channel_match.group(1))
@@ -615,12 +611,12 @@ Sender: {message.author.id}"""}
                 new_name = name_match.group(1)
 
                 if not channel:
-                    return "❌ Could not find the specified channel!"
+                    return "Could not find the specified channel!"
                 
                 return await self.discord_agent.change_channel_name(
                     message, channel, new_name
                 )
             except (ValueError, AttributeError):
-                return "❌ Invalid channel mention or name format!"
+                return "Invalid channel mention or name format!"
 
         return content
