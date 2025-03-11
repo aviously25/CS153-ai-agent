@@ -13,7 +13,6 @@ logger = logging.getLogger("discord")
 load_dotenv()
 
 PREFIX = "!"
-USER_ID = int(os.getenv("USER_ID"))
 
 # Create the bot with all intents
 # The message content and members intent must be enabled in the Discord Developer Portal for the bot to work.
@@ -54,10 +53,10 @@ async def on_message(message: discord.Message):
 
     # Ignore messages from self or other bots to prevent infinite loops
     if (
-        message.author.bot # Ignore messages if it's from the bot
-        or message.content.startswith("!") # Ignore messages if it's a generic command
-        or message.author.id != USER_ID  # Ignore messages from other users
-        or bot.user not in message.mentions # Ignore messages if it's not mentioning the bot
+        message.author.bot  # Ignore messages if it's from the bot
+        or message.content.startswith("!")  # Ignore messages if it's a generic command
+        or bot.user
+        not in message.mentions  # Ignore messages if it's not mentioning the bot
     ):
         return
 
