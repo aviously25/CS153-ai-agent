@@ -316,29 +316,32 @@ class DiscordAgent:
         bot_mention: discord.Member,
         new_name: str = None,
     ):
-        if not bot_mention.bot:
-            await message.channel.send("❌ The mentioned user is not a bot.")
+        """Changes a bot's name."""
+        if not bot_mention or not bot_mention.bot:
+            await message.channel.send("❌ Please specify a valid bot to rename.")
+            await self.prompt_change_name(message)
             return
 
-        if not new_name:
-            await message.channel.send("❌ Please provide a new name for the bot.")
+        if not new_name or not new_name.strip() or not 2 <= len(new_name) <= 32:
+            await message.channel.send("❌ Please provide a valid new name (2-32 characters).")
+            await self.prompt_change_name(message)
             return
 
         try:
+            old_name = bot_mention.display_name
             await bot_mention.edit(nick=new_name)
-            await message.channel.send(
-                f"✅ Successfully changed bot's name to **{new_name}**!"
-            )
+            return f"✅ Successfully changed bot's name from **{old_name}** to **{new_name}**!"
         except discord.Forbidden:
-            await message.channel.send(
-                "❌ I don't have permission to change the bot's name."
-            )
+            return "❌ I don't have permission to change the bot's name."
         except discord.HTTPException as e:
-            await message.channel.send(f"❌ Failed to change name: {str(e)}")
+            return f"❌ Failed to change name: {str(e)}"
 
     async def prompt_change_name(self, message: discord.Message):
+        """Sends a help message for bot name changes."""
         await message.channel.send(
-            "Please use the format: 'change the bot @botname name to <new_name>'"
+            "To change a bot's name, use the format:\n"
+            "• change the bot @botname name to NewName\n"
+            "Note: Name must be 2-32 characters long and can contain letters, numbers, underscores, and hyphens."
         )
 
     async def handle_change_bot_name(
@@ -831,11 +834,37 @@ class DiscordAgent:
         except discord.HTTPException as e:
             return f"❌ Failed to generate summary: {str(e)}"
 
+    def find_user(self, guild: discord.Guild, user_identifier: str) -> discord.Member:
+        """Find user by mention, name, display name, or nickname."""
+        # First try to parse mention format
+        mention_match = re.match(r'<@!?(\d+)>', user_identifier)
+        if mention_match:
+            user_id = int(mention_match.group(1))
+            member = guild.get_member(user_id)
+            if member:
+                return member
+
+        # If not a mention, try name matching
+        username = user_identifier.lower().strip('@')
+        for member in guild.members:
+            # Check exact matches first
+            if (member.name.lower() == username or 
+                member.display_name.lower() == username or 
+                (member.nick and member.nick.lower() == username)):
+                return member
+            
+            # Then try partial matches
+            if (username in member.name.lower() or
+                username in member.display_name.lower() or
+                (member.nick and username in member.nick.lower())):
+                return member
+        return None
+
     async def send_automated_message(
         self,
         message: discord.Message,
         target_type: str,
-        target: Union[discord.Member, discord.TextChannel],
+        target: Union[discord.Member, discord.TextChannel, str],
         msg_content: str,
         schedule_time: str = None
     ):
@@ -846,23 +875,32 @@ class DiscordAgent:
             if schedule_time:
                 try:
                     scheduled_time = self.parse_datetime(schedule_time)
-                    # Check if time is in the future
                     if scheduled_time <= datetime.datetime.now(datetime.timezone.utc):
                         return "❌ Schedule time must be in the future!"
                 except ValueError as e:
                     return f"❌ Invalid time format: {str(e)}"
 
             if target_type.lower() == "dm":
-                if not isinstance(target, discord.Member):
-                    return "❌ Invalid target for DM message!"
-                
-                if scheduled_time:
-                    # Calculate delay in seconds
-                    delay = (scheduled_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
-                    await asyncio.sleep(delay)
-                
-                await target.send(msg_content)
-                return f"✅ Message {'scheduled to be ' if schedule_time else ''}sent to {target.display_name}'s DMs!"
+                if isinstance(target, str):
+                    target = self.find_user(message.guild, target)
+                if not target or not isinstance(target, discord.Member):
+                    return f"❌ Could not find user! Use @mention or username. Example: @username or username"
+
+                try:
+                    if scheduled_time:
+                        delay = (scheduled_time - datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+                        await asyncio.sleep(delay)
+                    
+                    dm_channel = target.dm_channel
+                    if not dm_channel:
+                        dm_channel = await target.create_dm()
+                    
+                    await dm_channel.send(msg_content)
+                    return f"✅ Message {'scheduled to be ' if schedule_time else ''}sent to {target.display_name}'s DMs!"
+                except discord.Forbidden:
+                    return "❌ Cannot send DM to this user! They may have DMs disabled."
+                except Exception as e:
+                    return f"❌ Failed to send DM: {str(e)}"
 
             elif target_type.lower() == "channel":
                 if not isinstance(target, discord.TextChannel):

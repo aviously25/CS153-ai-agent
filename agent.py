@@ -3,6 +3,8 @@ from mistralai import Mistral
 import discord
 from discord_agent import DiscordAgent
 import re
+from collections import deque
+from datetime import datetime, timezone
 
 MISTRAL_MODEL = "mistral-large-latest"
 
@@ -207,6 +209,12 @@ You: send_automated_message(target_type="dm", target=@user1, message="Meeting st
 User: send "Going live!" to #announcements in 1 hour
 You: send_automated_message(target_type="channel", target=#announcements, message="Going live!", schedule_time="1h")
 
+User: schedule a message "Meeting in 5 minutes" to @user1 in 10s
+You: send_automated_message(target_type="dm", target=@user1, message="Meeting in 5 minutes", schedule_time="10s")
+
+User: send "Hi there" to easecord in 1m
+You: send_automated_message(target_type="dm", target=easecord, message="Hi there", schedule_time="1m")
+
 """
 
 
@@ -215,8 +223,38 @@ class MistralAgent:
         MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
         self.client = Mistral(api_key=MISTRAL_API_KEY)
         self.discord_agent = DiscordAgent(bot)
+        self.conversation_history = {}  # guild_id -> deque of messages
+        self.history_limit = 10  # Keep last 10 messages per guild
+        
+    def _add_to_history(self, guild_id: int, message: discord.Message):
+        """Add message to conversation history for the guild."""
+        if guild_id not in self.conversation_history:
+            self.conversation_history[guild_id] = deque(maxlen=self.history_limit)
+        
+        self.conversation_history[guild_id].append({
+            'author': message.author.name,
+            'content': message.content,
+            'timestamp': message.created_at.isoformat(),
+        })
+
+    def _get_history(self, guild_id: int) -> str:
+        """Get formatted conversation history for the guild."""
+        if guild_id not in self.conversation_history:
+            return ""
+            
+        history = []
+        for msg in self.conversation_history[guild_id]:
+            history.append(f"{msg['author']}: {msg['content']}")
+        return "\n".join(history)
 
     async def run(self, message: discord.Message):
+        # Add message to history if in a guild
+        if message.guild:
+            self._add_to_history(message.guild.id, message)
+            conversation_history = self._get_history(message.guild.id)
+        else:
+            conversation_history = ""
+
         # The simplest form of an agent
         # Send the message's content to Mistral's API and return Mistral's response
 
@@ -230,10 +268,15 @@ class MistralAgent:
         # send initial message to Mistral
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Content: {message.content} \n\n Channel Mentioned: {str(channel_mentions)} \n\n Channel Members: {str(channel_members)} \n\n Sender: {message.author.id}",
-            },
+            {"role": "user", "content": f"""Recent conversation:
+{conversation_history}
+
+Current message:
+{message.content}
+
+Channel Mentioned: {str(channel_mentions)}
+Channel Members: {str(channel_members)}
+Sender: {message.author.id}"""}
         ]
 
         # extract the response from Mistral
@@ -398,22 +441,43 @@ class MistralAgent:
             return
 
         if "change_bot_name" in content:
-            bot_mention_match = re.search(r"bot_mention=<@!?(\d+)>", content)
-            new_name_match = re.search(r"new_name=(\w+)", content)
+            # Try to extract bot mention and new name
+            bot_mention_match = re.search(r'bot_mention=([^,\)]+)', content)
+            new_name_match = re.search(r'new_name="?([a-zA-Z0-9_-]+)"?', content)  # Only allow valid name characters
 
-            bot_id = int(bot_mention_match.group(1)) if bot_mention_match else None
+            # Get bot member from mention
+            target = None
+            if bot_mention_match:
+                bot_str = bot_mention_match.group(1).strip()
+                # Try mention format first
+                mention_match = re.search(r'<@!?(\d+)>', bot_str)
+                if mention_match:
+                    bot_id = int(mention_match.group(1))
+                    target = message.guild.get_member(bot_id)
+                else:
+                    # Try finding bot by name
+                    bot_name = bot_str.strip('@')
+                    target = discord.utils.get(message.guild.members, name=bot_name, bot=True)
+
             new_name = new_name_match.group(1) if new_name_match else None
-            bot_member = message.guild.get_member(bot_id) if bot_id else None
-
-            if bot_member and bot_member.bot and new_name:
-                return await self.discord_agent.change_bot_name(
-                    message, bot_member, new_name
-                )
-            else:
-                await self.discord_agent.handle_change_bot_name(
-                    message, bot_member, new_name
-                )
+            
+            # Additional validation
+            if target and not target.bot:
+                await message.channel.send("❌ The specified user is not a bot.")
                 return
+            elif new_name and not 2 <= len(new_name) <= 32:
+                await message.channel.send("❌ Bot name must be between 2 and 32 characters.")
+                return
+
+            if target and target.bot and new_name:
+                return await self.discord_agent.change_bot_name(message, target, new_name)
+            elif not target:
+                await message.channel.send("❌ Please mention or specify the bot you want to rename.")
+                await self.discord_agent.prompt_change_name(message)
+            elif not new_name:
+                await message.channel.send(f"❌ Please specify a valid new name for {target.display_name}.")
+                await self.discord_agent.prompt_change_name(message)
+            return
 
         if "assign_role" in content:
             member_match = re.search(r"member=<@!?(\d+)>", content)
@@ -504,14 +568,8 @@ class MistralAgent:
             # Get target based on type
             target = None
             if target_type == "dm":
-                user_match = re.search(r'<@!?(\d+)>', target_str)
-                if not user_match:
-                    return "❌ Invalid user mention format!"
-                try:
-                    user_id = int(user_match.group(1))
-                    target = message.guild.get_member(user_id)
-                except (ValueError, AttributeError):
-                    return "❌ Could not parse user ID!"
+                # Pass the raw target string to the agent for flexible matching
+                target = target_str.strip()
             else:  # channel
                 channel_match = re.search(r'<#!?(\d+)>', target_str)
                 if not channel_match:
